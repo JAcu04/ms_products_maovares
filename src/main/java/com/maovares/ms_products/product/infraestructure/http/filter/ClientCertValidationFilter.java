@@ -5,8 +5,6 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 
-import com.maovares.ms_products.product.infraestructure.http.exception.InvalidCertificateException;
-
 import jakarta.servlet.Filter;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.FilterChain;
@@ -30,7 +28,8 @@ public class ClientCertValidationFilter implements Filter {
 
             if (certHeader == null) {
                 log.warn("Missing client certificate header for request from IP: {}", clientIp);
-                throw new InvalidCertificateException("Missing client certificate header");
+                sendError(httpRes, HttpServletResponse.SC_FORBIDDEN, "Missing client certificate");
+                return;
             }
 
             log.debug("Client certificate header found, decoding certificate");
@@ -50,6 +49,9 @@ public class ClientCertValidationFilter implements Filter {
                 log.error("Invalid client certificate thumbprint for request from IP: {} - Received: {}, Expected: {}", 
                          clientIp, thumbprint, EXPECTED_THUMBPRINT);
                 throw new InvalidCertificateException("Invalid client certificate thumbprint");
+                log.error("Invalid thumbprint: {}", thumbprint);
+                sendError(httpRes, HttpServletResponse.SC_FORBIDDEN, "Invalid certificate");
+                return;
             }
 
             log.info("Client certificate validation successful for request from IP: {}", clientIp);
@@ -63,6 +65,7 @@ public class ClientCertValidationFilter implements Filter {
             log.error("Unexpected error during client certificate validation for request from IP: {} - Error: {}", 
                      clientIp, e.getMessage(), e);
             throw new InvalidCertificateException("Error validating client certificate", e);
+            sendError(httpRes, HttpServletResponse.SC_FORBIDDEN, "Certificate validation error");
         }
     }
     
@@ -87,4 +90,15 @@ public class ClientCertValidationFilter implements Filter {
         }
         return sb.toString();
     }
+    private void sendError(HttpServletResponse response, int status, String message) {
+        try {
+            response.setStatus(status);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\": \"" + message + "\"}");
+            response.getWriter().flush();
+        } catch (Exception e) {
+            log.error("Error writing response", e);
+        }
+    }
+
 }
